@@ -112,7 +112,7 @@ pub fn hash_api_key(key: &str) -> String {
 
 /// Global authentication middleware.
 ///
-/// - Skips `/health`, `/healthz/*`, and `/unsubscribe` (public paths).
+/// - Skips `/health`, `/healthz/*`, `/unsubscribe` and the `/ui` dashboard (public paths).
 /// - When `api_keys` is empty, auth is disabled and all requests pass.
 /// - In multi-tenant mode, resolves the tenant and injects [`TenantId`].
 pub async fn auth_middleware(
@@ -123,7 +123,13 @@ pub async fn auth_middleware(
     let path = req.uri().path();
 
     // Public paths — always bypass auth.
-    if path == "/health" || path.starts_with("/healthz/") || path == "/unsubscribe" {
+    // `/ui` serves the static dashboard shell (issue #1112); its data calls
+    // go through the authenticated API.
+    if path == "/health"
+        || path.starts_with("/healthz/")
+        || path == "/unsubscribe"
+        || crate::dashboard::is_dashboard_path(path)
+    {
         return Ok(next.run(req).await);
     }
 

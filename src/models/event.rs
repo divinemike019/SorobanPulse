@@ -157,6 +157,19 @@ pub struct Event {
     /// #935). Defaults to "soroban-mainnet" for backward compatibility.
     #[sqlx(default)]
     pub network: String,
+    /// Transaction order within the ledger, decoded from the RPC event's
+    /// TOID (Issue #1065). `None` for events indexed before this field
+    /// existed, or where the id could not be parsed.
+    #[sqlx(default)]
+    pub tx_index: Option<i32>,
+    /// Operation index within the transaction, decoded from the TOID
+    /// (Issue #1065).
+    #[sqlx(default)]
+    pub op_index: Option<i32>,
+    /// Event index within the operation, decoded from the RPC event id
+    /// suffix (Issue #1065).
+    #[sqlx(default)]
+    pub event_index: Option<i32>,
     #[sqlx(default)]
     #[serde(skip)]
     pub total_count: i64,
@@ -208,6 +221,12 @@ pub struct PaginationParams {
     pub contract_id_prefix: Option<String>,
     /// Filter by tenant ID for multi-tenant isolation (Issue #887). Requires authentication.
     pub tenant_id: Option<String>,
+    /// Rendering for ScVal event data: `native`, `json` (default) or `xdr` (Issue #1064).
+    pub format: Option<String>,
+    /// Filter by network/chain_id (e.g. "mainnet", "testnet") when indexing
+    /// multiple networks concurrently from one deployment (Issue #1063).
+    /// Omitted returns events from every configured network.
+    pub network: Option<String>,
 }
 
 /// Sort order for event list endpoints.
@@ -284,6 +303,9 @@ pub struct StreamParams {
     pub fields: Option<String>,
     /// Filter by event type: contract, diagnostic, system
     pub event_type: Option<EventType>,
+    /// Rendering for ScVal event data on replayed events: `native`, `json`
+    /// (default) or `xdr` (Issue #1064).
+    pub format: Option<String>,
 }
 
 /// Query parameters for the multi-contract SSE stream endpoint.
@@ -798,6 +820,8 @@ pub struct RpcResponse<T> {
 
 #[derive(Debug, Deserialize)]
 pub struct RpcError {
+    // Required by the JSON-RPC wire format; not read in application logic but
+    // must be present for correct deserialization of error responses.
     #[allow(dead_code)]
     pub code: i64,
     pub message: String,
@@ -847,6 +871,37 @@ pub struct GetEventsResult {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct SorobanEvent {
+    /// Stable SSE event ID assigned by the ring buffer (not persisted to DB).
+    #[serde(skip_serializing_if = "Option::is_none", skip_deserializing)]
+    pub id: Option<Uuid>,
+    /// Raw RPC event id (TOID + event index), used to derive deterministic
+    /// intra-ledger ordering (Issue #1065). Not the same as `id` above.
+    #[serde(rename = "id", default, skip_serializing)]
+    pub rpc_id: Option<String>,
+    #[serde(rename = "contractId")]
+    pub contract_id: String,
+    #[serde(rename = "type")]
+    pub event_type: String,
+    #[serde(rename = "txHash")]
+    pub tx_hash: String,
+    pub ledger: u64,
+    #[serde(rename = "ledgerClosedAt")]
+    pub ledger_closed_at: String,
+    #[serde(rename = "ledgerHash", default)]
+    pub ledger_hash: Option<String>,
+    #[serde(rename = "inSuccessfulContractCall", default = "default_true")]
+    pub in_successful_call: bool,
+    pub value: Value,
+    pub topic: Option<Vec<Value>>,
+    /// Set by the indexer in multi-tenant mode; never serialized to JSON output.
+    #[serde(skip_serializing, default)]
+    pub tenant_id: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
+}
 
 #[cfg(test)]
 mod tests {
