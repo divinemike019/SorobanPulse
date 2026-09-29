@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help build test test-db lint fmt run docker-up docker-down migrate clean gen-openapi gen-postman deny
+.PHONY: help build test test-db lint fmt run seed docker-up docker-down migrate clean gen-openapi gen-postman deny
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*##"}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -50,6 +50,9 @@ geiger: ## Audit unsafe code usage with cargo-geiger (advisory, non-blocking)
 run: ## Start the development server
 	cargo run
 
+seed: ## Populate the local DB with realistic demo data (--events N, default 200)
+	cargo run --bin seed -- $(SEED_ARGS)
+
 docker-up: ## Start the full stack via Docker Compose and wait for app to be healthy
 	docker-compose up --build -d
 	docker-compose wait app
@@ -95,6 +98,11 @@ generate-sdk: ## Generate TypeScript and Python SDKs from OpenAPI spec
 		-o sdk/python \
 		--additional-properties=library=httpx
 
+sbom: ## Generate a CycloneDX SBOM for the Rust crate (requires cargo-cyclonedx)
+	@command -v cargo-cyclonedx >/dev/null 2>&1 || cargo install cargo-cyclonedx --locked
+	cargo cyclonedx --format json --output-cdx soroban-pulse-sbom.cdx.json
+	@echo "CycloneDX SBOM written to soroban-pulse-sbom.cdx.json"
+
 vacuum: ## Run VACUUM ANALYZE on the events table
 	@if [ -z "$$DATABASE_URL" ]; then echo "DATABASE_URL is not set"; exit 1; fi
 	psql "$$DATABASE_URL" -c "VACUUM ANALYZE events;"
@@ -109,6 +117,17 @@ zipkin-up: ## Start Zipkin container
 
 zipkin-down: ## Stop Zipkin container
 	docker stop zipkin || true && docker rm zipkin || true
+
+web-dev: ## Install web dependencies and start the dashboard dev server
+	cd web && npm ci && npm run dev
+
+web-build: ## Build the web dashboard for production
+	cd web && npm ci && npm run build
+
+web-lint: ## Lint and type-check the web dashboard
+	cd web && npm ci && npm run lint && npm run typecheck
+
+.PHONY: web-dev web-build web-lint
 
 fuzz: ## Run fuzz tests locally (60 seconds each)
 	@command -v cargo-fuzz >/dev/null 2>&1 || cargo install cargo-fuzz
