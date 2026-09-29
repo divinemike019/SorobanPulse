@@ -84,50 +84,48 @@ else
 fi
 
 # ── 4. Seed development data ──────────────────────────────────────────────────
-info "Seeding development data…"
+info "Seeding development data with realistic demo events…"
 
-# Insert a small set of representative events so `GET /v1/events` returns
-# something useful immediately.  The INSERT is idempotent via ON CONFLICT.
-psql "$DATABASE_URL" <<'SQL'
+# Use the Rust seed binary for a richer, realistic dataset.
+# SEED_EVENTS can be overridden (e.g. export SEED_EVENTS=1000) before
+# running postCreate.sh to get a larger dataset.
+SEED_EVENTS="${SEED_EVENTS:-200}"
+
+if cargo run --bin seed -- --events "$SEED_EVENTS" --database-url "$DATABASE_URL" 2>&1; then
+  ROW_COUNT=$(psql -t -A "$DATABASE_URL" -c "SELECT COUNT(*) FROM events;" 2>/dev/null || echo "?")
+  success "Database seeded — ${ROW_COUNT} event(s) in the events table"
+else
+  warn "Rust seed binary failed; falling back to minimal inline seed…"
+  psql "$DATABASE_URL" <<'SQL'
 INSERT INTO events (
   id, contract_id, event_type, tx_hash, ledger, "timestamp", event_data, created_at
 )
 VALUES
   (
     gen_random_uuid(),
-    'CDEV0000000000000000000000000000000000000000000000000000FAKE0001',
+    'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4',
     'contract',
     'devtxhash000000000000000000000000000000000000000000000000000001',
     1000001,
     NOW() - INTERVAL '10 minutes',
-    '{"topic":["transfer"],"value":{"amount":"1000000","from":"GDEV...","to":"GDEV2..."}}',
+    '{"topic":["transfer"],"value":{"i128":{"hi":0,"lo":1000000}}}',
     NOW()
   ),
   (
     gen_random_uuid(),
-    'CDEV0000000000000000000000000000000000000000000000000000FAKE0001',
+    'CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4',
     'contract',
     'devtxhash000000000000000000000000000000000000000000000000000002',
     1000002,
     NOW() - INTERVAL '5 minutes',
-    '{"topic":["mint"],"value":{"amount":"500000","to":"GDEV2..."}}',
-    NOW()
-  ),
-  (
-    gen_random_uuid(),
-    'CDEV0000000000000000000000000000000000000000000000000000FAKE0002',
-    'contract',
-    'devtxhash000000000000000000000000000000000000000000000000000003',
-    1000003,
-    NOW() - INTERVAL '1 minute',
-    '{"topic":["swap"],"value":{"token_in":"XLM","token_out":"USDC","amount_in":"100"}}',
+    '{"topic":["mint"],"value":{"i128":{"hi":0,"lo":500000}}}',
     NOW()
   )
 ON CONFLICT DO NOTHING;
 SQL
-
-ROW_COUNT=$(psql -t -A "$DATABASE_URL" -c "SELECT COUNT(*) FROM events;")
-success "Database seeded — ${ROW_COUNT} event(s) in the events table"
+  ROW_COUNT=$(psql -t -A "$DATABASE_URL" -c "SELECT COUNT(*) FROM events;" 2>/dev/null || echo "?")
+  success "Fallback seed complete — ${ROW_COUNT} event(s) in the events table"
+fi
 
 # ── 5. Node dependencies ──────────────────────────────────────────────────────
 info "Installing Node dependencies for frontend…"
@@ -153,5 +151,7 @@ echo ""
 echo "  Start the API:           make run"
 echo "  Run tests:               make test"
 echo "  Start frontend:          cd frontend && npm run dev"
+echo "  Re-seed (200 events):    make seed"
+echo "  Seed for perf testing:   make seed SEED_ARGS='--events 100000'"
 echo "  List all make targets:   make help"
 echo ""

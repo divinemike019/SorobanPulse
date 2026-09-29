@@ -168,3 +168,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "soroban-pulse"
 path = "src/main.rs"
+
+[[bin]]
+name = "seed"
+path = "src/bin/seed.rs"

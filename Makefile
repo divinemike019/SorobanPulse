@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help build test test-db lint fmt run docker-up docker-down migrate clean gen-openapi gen-postman deny
+.PHONY: help build test test-db lint fmt run seed docker-up docker-down migrate clean gen-openapi gen-postman deny
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*##"}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -49,6 +49,9 @@ geiger: ## Audit unsafe code usage with cargo-geiger (advisory, non-blocking)
 
 run: ## Start the development server
 	cargo run
+
+seed: ## Populate the local DB with realistic demo data (--events N, default 200)
+	cargo run --bin seed -- $(SEED_ARGS)
 
 docker-up: ## Start the full stack via Docker Compose and wait for app to be healthy
 	docker-compose up --build -d

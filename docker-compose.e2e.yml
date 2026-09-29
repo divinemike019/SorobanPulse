@@ -92,25 +92,23 @@ services:
       start_period: 30s
 
   # ---------------------------------------------------------------------------
-  # Seed — loads tests/e2e/seed.sql once the app is healthy (the app runs the
+  # Seed — runs the Rust seed binary once the app is healthy (the app runs
   # migrations on startup, so the schema exists by then), then exits.
+  # Override SEED_EVENTS to control volume (default: 200 events).
   # ---------------------------------------------------------------------------
   seed:
-    image: postgres:16-alpine
+    build:
+      context: .
+      dockerfile: Dockerfile
     depends_on:
       app:
         condition: service_healthy
     environment:
-      PGPASSWORD: e2e
-    volumes:
-      - ./tests/e2e/seed.sql:/seed/seed.sql:ro
+      DATABASE_URL: postgres://e2e:e2e@db:5432/soroban_pulse_e2e
     command:
-      - psql
-      - --host=db
-      - --username=e2e
-      - --dbname=soroban_pulse_e2e
-      - --set=ON_ERROR_STOP=1
-      - --file=/seed/seed.sql
+      - /app/seed
+      - --events
+      - "${SEED_EVENTS:-200}"
     restart: "no"
 
   # ---------------------------------------------------------------------------
